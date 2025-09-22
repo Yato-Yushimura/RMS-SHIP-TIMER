@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ship Timer</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: url("ship.png") no-repeat center center fixed;
+      background-size: cover;
+      font-family: Arial, sans-serif;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 20px;
+      box-sizing: border-box;
+      min-height: 100vh;
+    }
+    #timers {
+      width: 100%;
+      max-width: 1300px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+    }
+    .timer-container {
+      background: rgba(0,0,0,0.7);
+      border-radius: 18px;
+      padding: 20px;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 0 20px rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 360px;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .timer-container:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 0 25px rgba(0,0,0,0.9);
+    }
+    .serverDisplay {
+      font-size: 28px;
+      color: #ffeb3b;
+      margin-bottom: 15px;
+      font-weight: bold;
+      text-align: center;
+      text-shadow: 0 0 6px #000;
+    }
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 15px;
+      justify-content: center;
+    }
+    .button-row button {
+      flex: 1;
+      padding: 12px;
+      font-size: 15px;
+      background: linear-gradient(135deg, #4caf50, #2e7d32);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.2s ease, background 0.3s ease;
+      min-width: 120px;
+    }
+    .button-row button:hover {
+      background: linear-gradient(135deg, #66bb6a, #388e3c);
+      transform: scale(1.05);
+    }
+    .timer {
+      font-size: 54px;
+      margin: 20px 0 10px 0;
+      font-weight: bold;
+      text-align: center;
+      text-shadow: 0 0 8px #000;
+    }
+    .status {
+      font-size: 18px;
+      min-height: 42px;
+      text-align: center;
+      line-height: 1.4;
+      margin-top: 8px;
+    }
+    .event {
+      color: #00e676;
+      font-weight: bold;
+      text-shadow: 0 0 5px #000;
+    }
+    .waiting {
+      color: #ffcc00;
+      text-shadow: 0 0 5px #000;
+    }
+    .alert {
+      color: #ff1744;
+      font-weight: bold;
+      text-shadow: 0 0 6px #000;
+    }
+    .add-timer-btn {
+      margin-top: 15px;
+      width: 100%;
+      padding: 14px 0;
+      font-size: 16px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2196f3, #1565c0);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+    .add-timer-btn:hover {
+      background: linear-gradient(135deg, #42a5f5, #1976d2);
+      transform: scale(1.03);
+    }
+  </style>
+</head>
+<body>
+  <div id="timers"></div>
+<script>
+  const eventDuration = 5 * 60;
+  const waitDuration = 10 * 60;
+  const totalCycle = eventDuration + waitDuration;
+  let timers = [];
+  function speak(text) {
+    const synth = window.speechSynthesis;
+    let voices = synth.getVoices();
+    if (!voices.length) {
+      window.speechSynthesis.onvoiceschanged = () => speak(text);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    const preferredVoiceNames = ["Google US English","Google UK English Female","Microsoft Zira Desktop","Samantha"];
+    const selectedVoice = voices.find(v => preferredVoiceNames.some(name => v.name.includes(name)));
+    utterance.voice = selectedVoice || voices[0];
+    synth.speak(utterance);
+  }
+  function speakServerNumber(timer) {
+    const numberWords = {1:'one',2:'two',3:'three',4:'four',5:'five',6:'six',7:'seven',8:'eight',9:'nine',10:'ten'};
+    if (!timer.serverId) return;
+    const word = numberWords[timer.serverId] || timer.serverId.toString();
+    speak(`Server ${word}`);
+  }
+  function addTimer(id) {
+    const container = document.createElement("div");
+    container.className = "timer-container";
+    container.id = `timer-container-${id}`;
+    container.innerHTML = `
+      <div id="serverDisplay-${id}" class="serverDisplay">🧭 Server: Not assigned</div>
+      <div class="button-row">
+        <button onclick="setServer(${id})">🎯 Assign Server</button>
+        <button onclick="startCycle(${id}, 0)">🚢 Ship Arrived</button>
+        <button onclick="startCycle(${id}, ${5*60})">🕓 Ship Left</button>
+        <button onclick="adjustTime(${id}, 10)">➕ 10s</button>
+        <button onclick="adjustTime(${id}, -10)">➖ 10s</button>
+        <button onclick="togglePause(${id})" id="pauseBtn-${id}">⏸ Pause</button>
+      </div>
+      <div id="timer-${id}" class="timer">00:00</div>
+      <div id="status-${id}" class="status">Press a button based on what you see in the game.</div>
+      ${id === 1 ? `<button class="add-timer-btn" onclick="addNewTimer()">➕ Add Timer</button>` : ''}
+    `;
+    document.getElementById("timers").appendChild(container);
+    timers.push({id,serverId:null,startTime:null,pausedAt:null,paused:false,interval:setInterval(()=>updateTimer(id),1000),beepPlayedAtStart:false,beepPlayedOneMinuteBefore:false,spokenOneMinuteBefore:false,spokenEventEnd:false});
+    updateTimer(id);
+  }
+  function addNewTimer() {
+    if (timers.length >= 9) {alert("Max 9 timers allowed.");return;}
+    const newId = timers.length + 1;
+    addTimer(newId);
+  }
+  function setServer(id) {
+    const input = prompt("Enter the server number (e.g., 1, 2, 3):");
+    if (input && !isNaN(input)) {
+      const num = parseInt(input);
+      timers[id - 1].serverId = num;
+      document.getElementById(`serverDisplay-${id}`).textContent = "🧭 Server: " + num;
+      speakServerNumber(timers[id - 1]);
+    } else {alert("Please enter a valid number.");}
+  }
+  function startCycle(id, offsetSeconds) {
+    const now = Date.now();
+    const timer = timers[id - 1];
+    timer.startTime = now - offsetSeconds * 1000;
+    timer.paused = false;
+    timer.pausedAt = null;
+    timer.beepPlayedAtStart = false;
+    timer.beepPlayedOneMinuteBefore = false;
+    timer.spokenOneMinuteBefore = false;
+    timer.spokenEventEnd = false;
+    document.getElementById(`pauseBtn-${id}`).textContent = "⏸ Pause";
+    updateTimer(id);
+  }
+  function adjustTime(id, seconds) {
+    const timer = timers[id - 1];
+    if (!timer.startTime || timer.paused) return;
+    timer.startTime -= seconds * 1000;
+    updateTimer(id);
+  }
+  function togglePause(id) {
+    const timer = timers[id - 1];
+    if (!timer.startTime) {alert("⏸ You must start the timer before pausing it.");return;}
+    const now = Date.now();
+    if (timer.paused) {
+      const pausedDuration = now - timer.pausedAt;
+      timer.startTime += pausedDuration;
+      timer.paused = false;
+      timer.pausedAt = null;
+      document.getElementById(`pauseBtn-${id}`).textContent = "⏸ Pause";
+    } else {
+      timer.pausedAt = now;
+      timer.paused = true;
+      document.getElementById(`pauseBtn-${id}`).textContent = "▶ Resume";
+    }
+  }
+  function playBeep() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(1000, ctx.currentTime);
+    gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.3);
+  }
+  function getServerText(timer) {
+    if (timer.serverId !== null) {
+      const numberWords = {1:'one',2:'two',3:'three',4:'four',5:'five',6:'six',7:'seven',8:'eight',9:'nine',10:'ten'};
+      const word = numberWords[timer.serverId] || timer.serverId.toString();
+      return ` server ${word}`;
+    }
+    return "";
+  }
+  function updateTimer(id) {
+    const now = Date.now();
+    const timer = timers[id - 1];
+    const display = document.getElementById(`timer-${id}`);
+    const status = document.getElementById(`status-${id}`);
+    if (!timer.startTime) {display.textContent = "00:00";status.textContent = "Press a button based on what you see in the game.";return;}
+    if (timer.paused) return;
+    const secondsElapsed = Math.floor((now - timer.startTime) / 1000);
+    const secondsInCycle = secondsElapsed % totalCycle;
+    const minutes = Math.floor(secondsInCycle / 60);
+    const seconds = secondsInCycle % 60;
+    display.textContent = String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+    if (secondsInCycle < eventDuration) {
+      status.innerHTML = "<span class='event'>🚢 The ship is here. Enjoy the event!</span>";
+      if (!timer.beepPlayedAtStart) {
+        playBeep();speak("Ship arrived," + getServerText(timer));
+        timer.beepPlayedAtStart = true;timer.beepPlayedOneMinuteBefore = false;timer.spokenOneMinuteBefore = false;timer.spokenEventEnd = false;
+      }
+      if (secondsInCycle === eventDuration - 1 && !timer.spokenEventEnd) {
+        speak("The event has ended," + getServerText(timer));timer.spokenEventEnd = true;
+      }
+    } else if (secondsInCycle >= totalCycle - 60) {
+      status.innerHTML = "<span class='alert'>⚠️ The ship arrives in less than 1 minute!</span>";
+      if (!timer.beepPlayedOneMinuteBefore) {playBeep();timer.beepPlayedOneMinuteBefore = true;}
+      if (!timer.spokenOneMinuteBefore) {speak("One minute left for the ship," + getServerText(timer));timer.spokenOneMinuteBefore = true;}
+    } else {
+      status.innerHTML = "<span class='waiting'>⌛ The ship has left. Waiting for it to return...</span>";
+      if (secondsInCycle < totalCycle - 60) {timer.beepPlayedAtStart = false;timer.beepPlayedOneMinuteBefore = false;timer.spokenOneMinuteBefore = false;timer.spokenEventEnd = false;}
+    }
+  }
+  addTimer(1);
+</script>
+</body>
+</html>
